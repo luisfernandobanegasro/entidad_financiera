@@ -1,0 +1,7 @@
+Django==5.2.6
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+django-environ
+django-extensions
+psycopg2-binary
