@@ -49,12 +49,37 @@ class AuthController extends sn.StateNotifier<AuthState> {
     }
   }
 
+  // lib/features/auth/auth_controller.dart (solo el método register)
   Future<void> register({
     required String username,
     required String email,
     required String password,
+    required String password2,
+    String? firstName,
+    String? lastName,
+    required String tipoDocumento,
+    required String numeroDocumento,
+    required String telefono,
+    String? direccion,
+    String? fechaNacimiento,
+    String? ocupacion,
+    num? ingresosMensuales,
   }) async {
-    await _repo.register(username: username, email: email, password: password);
+    await _repo.registerPublic(
+      username: username,
+      email: email,
+      password: password,
+      password2: password2,
+      firstName: firstName,
+      lastName: lastName,
+      tipoDocumento: tipoDocumento,
+      numeroDocumento: numeroDocumento,
+      telefono: telefono,
+      direccion: direccion,
+      fechaNacimiento: fechaNacimiento,
+      ocupacion: ocupacion,
+      ingresosMensuales: ingresosMensuales,
+    );
   }
 
   Future<void> logout() async {

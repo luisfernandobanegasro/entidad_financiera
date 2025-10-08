@@ -1,7 +1,7 @@
 // src/components/Sidebar/Sidebar.js
 import React, { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import axios from "axios";
+import axios from "../../config/axios";
 import "./Sidebar.css";
 import Swal from "sweetalert2";
 /**
@@ -104,6 +104,16 @@ export default function Sidebar() {
           {!collapsed && <span>Roles y Permisos</span>}
         </NavLink>
 
+        <NavLink to="/solicitudes" className="sidebar__link">
+          <span className="sidebar__icon">📄</span>
+          {!collapsed && <span>Solicitudes</span>}
+        </NavLink>
+
+        <NavLink to="/solicitudes/nueva" className="sidebar__link">
+          <span className="sidebar__icon">➕</span>
+          {!collapsed && <span>Nueva solicitud</span>}
+        </NavLink>
+        
         {/* Cerrar sesión desde el menú lateral */}
         <a
           href="/logout"

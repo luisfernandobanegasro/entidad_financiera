@@ -8,6 +8,11 @@ import '../features/auth/onboarding_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/register_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/solicitudes/solicitud_new_screen.dart';
+import '../features/solicitudes/solicitudes_list_screen.dart';
+import '../features/solicitudes/solicitud_detail_screen.dart';
+import '../features/profile/profile_screen.dart';
+import '../features/notifications/notifications_screen.dart';
 
 class AppRouter {
   /// Acepta WidgetRef (desde un ConsumerWidget/ConsumerState)
@@ -55,6 +60,23 @@ class AppRouter {
           path: '/home',
           builder: (_, __) => const HomeScreen(),
         ),
+        GoRoute(
+          path: '/solicitudes',
+          builder: (_, __) => const SolicitudesListScreen(),
+        ),
+        GoRoute(
+          path: '/solicitudes/new',
+          builder: (_, __) => const SolicitudNewScreen(),
+        ),
+        GoRoute(
+          path: '/solicitudes/:id',
+          builder: (ctx, st) =>
+              SolicitudDetailScreen(id: st.pathParameters['id']!),
+        ),
+        GoRoute(path: '/perfil', builder: (_, __) => const ProfileScreen()),
+        GoRoute(
+            path: '/notificaciones',
+            builder: (_, __) => const NotificationsScreen()),
       ],
     );
   }

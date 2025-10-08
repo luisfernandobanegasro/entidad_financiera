@@ -1,11 +1,8 @@
 // src/App.js
 import React, { useState, useEffect } from 'react';
-// Nota: mantenemos BrowserRouter como Router aquí (Opción B). 
-// Si luego prefieres Opción A, moverás el Router a index.js.
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 
-// Páginas / componentes
 import Login from './components/Login/Login';
 import Logout from './components/Logout/Logout';
 import PasswordReset from './components/PasswordReset/PasswordReset';
@@ -15,20 +12,22 @@ import Dashboard from './components/Dashboard/Dashboard';
 import ClientManagement from './components/ClientManagement/ClientManagement';
 import EmployeeManagement from './components/EmployeeManagement/EmployeeManagement';
 
-// Layouts
-import Layout from './components/Layout/Layout';         // Sidebar + Main para rutas protegidas
-import AuthLayout from './components/Auth/AuthLayout';   // Fullscreen centrado para login/reset
+import Layout from './components/Layout/Layout';
+import AuthLayout from './components/Auth/AuthLayout';
 
 import './App.css';
 
+// 👇 importa las páginas de Solicitudes
+import SolicitudesList from './pages/solicitudes/SolicitudesList';
+import SolicitudCreate from './pages/solicitudes/SolicitudCreate';
+import SolicitudDetail from './pages/solicitudes/SolicitudDetail';
+import PlanView from './pages/solicitudes/PlanView';
+
 function App() {
-  // ======= Estado de autenticación global =======
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState(null); // por si lo usas luego
+  const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-
-  // ======= Verificar token al inicio =======
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     if (token) {
@@ -41,11 +40,8 @@ function App() {
 
   const verifyToken = async () => {
     try {
-      // Usamos un endpoint que requiere auth para validar el token
       await axios.get('http://localhost:8000/api/users/');
       setIsAuthenticated(true);
-      // Si necesitas el rol:
-      // setUserRole( ... );
     } catch (error) {
       console.error('Token verification failed:', error);
       localStorage.removeItem('access_token');
@@ -57,61 +53,41 @@ function App() {
     }
   };
 
-  const handleLoginSuccess = () => {
-    setIsAuthenticated(true);
-    // aquí podrías volver a cargar datos del usuario/rol
-  };
+  const handleLoginSuccess = () => setIsAuthenticated(true);
+  const handleLogoutSuccess = () => { setIsAuthenticated(false); setUserRole(null); };
 
-  const handleLogoutSuccess = () => {
-    setIsAuthenticated(false);
-    setUserRole(null);
-  };
+  if (loading) return <div className="loading">Cargando...</div>;
 
-  if (loading) {
-    return <div className="loading">Cargando...</div>;
-  }
-
-  // ===========================================================
-  // OJO: useLocation() NO puede usarse aquí arriba del Router.
-  // Solución (Opción B): creamos un componente interno "AppRoutes"
-  // que SÍ se renderiza DENTRO del <Router>.
-  // ===========================================================
   const AppRoutes = () => {
     const location = useLocation();
     const isAuthPage = location.pathname === "/login" || location.pathname === "/password-reset";
-    
+
     return (
       <div className="App">
-        {/* Header: solo se muestra si NO estamos en rutas de auth */}
         {!isAuthPage && (
           <header className="App-header">
-            <h1>Sistema de Gestión de Solicitudes de Crédito</h1>
-            {/* {isAuthenticated && (
-              <div className="header-actions">
-                <Logout onLogoutSuccess={handleLogoutSuccess} />
-              </div>
-            )} */}
+            <h1>Gestión de Solicitudes de Crédito</h1>
           </header>
         )}
 
         <main className="App-main">
           <Routes>
-            {/* Ruta raíz: redirige según autenticación */}
-            <Route 
+            {/* Raíz -> redirige según sesión (opcional: a /solicitudes) */}
+            <Route
               path="/"
               element={
                 isAuthenticated
-                  ? <Navigate to="/dashboard" replace />
+                  ? <Navigate to="/solicitudes" replace />
                   : <Navigate to="/login" replace />
               }
             />
 
-            {/* Login: fullscreen centrado, sin header/footer */}
+            {/* Públicas */}
             <Route
               path="/login"
               element={
                 isAuthenticated
-                  ? <Navigate to="/dashboard" replace />
+                  ? <Navigate to="/solicitudes" replace />
                   : (
                     <AuthLayout>
                       <Login onLoginSuccess={handleLoginSuccess} />
@@ -119,13 +95,11 @@ function App() {
                   )
               }
             />
-
-            {/* Password Reset: fullscreen centrado, sin header/footer */}
             <Route
               path="/password-reset"
               element={
                 isAuthenticated
-                  ? <Navigate to="/dashboard" replace />
+                  ? <Navigate to="/solicitudes" replace />
                   : (
                     <AuthLayout>
                       <PasswordReset />
@@ -134,18 +108,18 @@ function App() {
               }
             />
 
-            {/* ===== Rutas protegidas (todas envueltas en Layout con sidebar) ===== */}
+            {/* Protegidas */}
             {isAuthenticated && (
               <>
                 <Route
                   path="/dashboard"
                   element={
                     <Layout>
-                      
                       <Dashboard />
                     </Layout>
                   }
                 />
+
                 <Route
                   path="/users"
                   element={
@@ -178,36 +152,67 @@ function App() {
                     </Layout>
                   }
                 />
-                  
-                
-                 {/* 404 */}
+
+                {/* 👇 NUEVAS RUTAS DE SOLICITUDES */}
+                <Route
+                  path="/solicitudes"
+                  element={
+                    <Layout>
+                      <SolicitudesList />
+                    </Layout>
+                  }
+                />
+                <Route
+                  path="/solicitudes/nueva"
+                  element={
+                    <Layout>
+                      <SolicitudCreate />
+                    </Layout>
+                  }
+                />
+                <Route
+                  path="/solicitudes/:id"
+                  element={
+                    <Layout>
+                      <SolicitudDetail />
+                    </Layout>
+                  }
+                />
+                <Route
+                  path="/solicitudes/:id/plan"
+                  element={
+                    <Layout>
+                      <PlanView />
+                    </Layout>
+                  }
+                />
+
+                {/* 404 protegido */}
                 <Route
                   path="*"
                   element={
                     <Layout>
-                      <div style={{padding: 24}}>
+                      <div style={{ padding: 24 }}>
                         <h2>Página no encontrada</h2>
-                        <p>Esta vista aún no está implementada. Usa el menú de la izquierda para navegar.</p>
+                        <p>Usa el menú de la izquierda para navegar.</p>
                       </div>
                     </Layout>
                   }
                 />
               </>
             )}
-           </Routes>
+          </Routes>
         </main>
 
-        {/* Footer: solo si hay sesión (por lo tanto nunca en login/reset) */}
         {isAuthenticated && (
           <footer className="App-footer">
-            <p>&copy; {new Date().getFullYear()} Sistema de Gestión de Créditos - Grupo 10</p>
+            <p>&copy; {new Date().getFullYear()} Sistema de Gestión de Créditos</p>
           </footer>
         )}
       </div>
     );
   };
 
-  // Aquí sí existe <Router>, y DENTRO renderizamos AppRoutes (que usa useLocation)
   return (
     <Router>
       <AppRoutes />
