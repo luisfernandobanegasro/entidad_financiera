@@ -18,6 +18,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final ingresosCtrl = TextEditingController();
   final fechaNacCtrl = TextEditingController();
 
+  /// Para no machacar lo que escribe el usuario cada rebuild
+  bool _prefilledOnce = false;
+
   @override
   void initState() {
     super.initState();
@@ -39,7 +42,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     dirCtrl.text = cliente?['direccion'] ?? '';
     ocupCtrl.text = cliente?['ocupacion'] ?? '';
     ingresosCtrl.text = cliente?['ingresos_mensuales']?.toString() ?? '';
-    fechaNacCtrl.text = cliente?['fecha_nacimiento'] ?? '';
+    // si backend devuelve fecha como "YYYY-MM-DD"
+    fechaNacCtrl.text = (cliente?['fecha_nacimiento'] ?? '') as String;
   }
 
   Future<void> _save() async {
@@ -56,7 +60,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     };
     await ref.read(profileProvider.notifier).saveCliente(body);
     if (!mounted) return;
-    setState(() => editing = false);
+    setState(() {
+      editing = false;
+      _prefilledOnce = false; // para que tome los valores actualizados
+    });
   }
 
   Future<void> _refresh() => ref.read(profileProvider.notifier).load();
@@ -66,20 +73,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final auth = ref.watch(authProvider);
     final st = ref.watch(profileProvider);
 
-    final me = st.me;
-    final user = me ?? auth.user; // fallback
-    final cliente = me?['cliente_info'];
-    final ui = me?['username'] ?? user?['username'] ?? '';
-    final name = (me?['first_name'] ?? user?['first_name'] ?? '')
-                 .toString()
-                 .trim();
-    final last = (me?['last_name'] ?? user?['last_name'] ?? '')
-                 .toString()
-                 .trim();
-    final fullName = ([name, last]..removeWhere((e)=>e.isEmpty)).join(' ');
-    final email = me?['email'] ?? user?['email'] ?? '';
+    final user = st.user ?? auth.user;
+    final cliente = st.cliente;
 
-    if (!editing) _fill(cliente);
+    final username = (user?['username'] ?? '') as String;
+    final first = (user?['first_name'] ?? '') as String;
+    final last = (user?['last_name'] ?? '') as String;
+    final fullName =
+        ([first, last]..removeWhere((e) => e.trim().isEmpty)).join(' ');
+    final displayName = fullName.isEmpty ? username : fullName;
+    final email = (user?['email'] ?? '') as String;
+
+    // Precargar campos solo una vez cuando llega el cliente o cuando dejo de editar
+    if (!_prefilledOnce && cliente != null && !editing) {
+      _fill(cliente);
+      _prefilledOnce = true;
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -87,7 +96,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         actions: [
           IconButton(
             icon: Icon(editing ? Icons.close : Icons.edit),
-            onPressed: () => setState(() => editing = !editing),
+            onPressed: () {
+              setState(() {
+                editing = !editing;
+                if (!editing) {
+                  // al salir de edición, rellenar de nuevo con el estado actual
+                  _prefilledOnce = false;
+                }
+              });
+            },
             tooltip: editing ? 'Cancelar' : 'Editar',
           ),
         ],
@@ -106,8 +123,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   CircleAvatar(
                     radius: 28,
                     child: Text(
-                      (fullName.isNotEmpty ? fullName[0] : ui.isNotEmpty ? ui[0] : '?').toUpperCase(),
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      (displayName.isNotEmpty
+                              ? displayName[0]
+                              : (username.isNotEmpty ? username[0] : '?'))
+                          .toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -115,8 +138,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(fullName.isEmpty ? ui : fullName,
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                        Text(displayName,
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 2),
                         Text(email, style: const TextStyle(color: Colors.grey)),
                       ],
@@ -127,20 +151,32 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Resumen documento
-            if (cliente != null) Container(
-              padding: const EdgeInsets.all(16),
-              decoration: _card,
-              child: Wrap(
-                spacing: 16,
-                runSpacing: 8,
-                children: [
-                  _pill('Documento', '${cliente['tipo_documento'] ?? ''} ${cliente['numero_documento'] ?? ''}'.trim()),
-                  _pill('Puntaje', '${cliente['puntuacion_crediticia'] ?? 0}'),
-                  _pill('Preferencial', (cliente['es_cliente_preferencial'] ?? false) ? 'Sí' : 'No'),
-                ],
+            // Resumen documento / score
+            if (cliente != null)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: _card,
+                child: Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
+                  children: [
+                    _pill(
+                      'Documento',
+                      '${cliente['tipo_documento'] ?? ''} '
+                              '${cliente['numero_documento'] ?? ''}'
+                          .trim(),
+                    ),
+                    _pill(
+                        'Puntaje', '${cliente['puntuacion_crediticia'] ?? 0}'),
+                    _pill(
+                      'Preferencial',
+                      (cliente['es_cliente_preferencial'] ?? false)
+                          ? 'Sí'
+                          : 'No',
+                    ),
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: 12),
 
             // Form cliente
@@ -151,17 +187,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('Datos del cliente',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 10),
-                  _field('Teléfono', telCtrl, enabled: editing, keyboard: TextInputType.phone),
+                  _field('Teléfono', telCtrl,
+                      enabled: editing, keyboard: TextInputType.phone),
                   _field('Dirección', dirCtrl, enabled: editing),
                   _field('Ocupación', ocupCtrl, enabled: editing),
-                  _field('Ingresos mensuales', ingresosCtrl, enabled: editing, keyboard: TextInputType.number),
-                  _field('Fecha nac. (YYYY-MM-DD)', fechaNacCtrl, enabled: editing, keyboard: TextInputType.datetime),
-                  if (st.error != null) Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(st.error!, style: const TextStyle(color: Colors.red)),
-                  ),
+                  _field('Ingresos mensuales', ingresosCtrl,
+                      enabled: editing, keyboard: TextInputType.number),
+                  _field('Fecha nac. (YYYY-MM-DD)', fechaNacCtrl,
+                      enabled: editing, keyboard: TextInputType.datetime),
+                  if (st.error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(st.error!,
+                          style: const TextStyle(color: Colors.red)),
+                    ),
                   const SizedBox(height: 8),
                   if (editing)
                     FilledButton.icon(
@@ -172,6 +214,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ],
               ),
             ),
+
+            if (st.loading)
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: LinearProgressIndicator(),
+              ),
           ],
         ),
       ),
@@ -179,10 +227,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   BoxDecoration get _card => BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(14),
-    boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0,2))]
-  );
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2))
+        ],
+      );
 
   Widget _pill(String k, String v) {
     return Container(
@@ -198,7 +248,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _field(String label, TextEditingController c, {bool enabled=true, TextInputType? keyboard}) {
+  Widget _field(String label, TextEditingController c,
+      {bool enabled = true, TextInputType? keyboard}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextField(

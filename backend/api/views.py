@@ -39,6 +39,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 # =========================
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
+    serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_permissions(self):
@@ -75,7 +76,18 @@ class UserViewSet(viewsets.ModelViewSet):
         user = ser.save()
         return Response(ser.to_representation(user), status=status.HTTP_201_CREATED)
 
-    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def me(self, request):
+        u = request.user
+        data = UserSerializer(u).data
+        cli = Cliente.objects.filter(user=u).first()
+        emp = Empleado.objects.filter(user=u).first()
+        # campos adicionales que la app móvil necesita
+        data['rol_nombre']  = getattr(getattr(u, 'userprofile', None), 'rol', None) and u.userprofile.rol.nombre
+        data['cliente_id']  = cli.id if cli else None
+        data['empleado_id'] = emp.id if emp else None
+        return Response(data)
+
     # =========================
     # Cambiar contraseña
     # =========================

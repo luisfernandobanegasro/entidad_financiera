@@ -1,9 +1,9 @@
 // lib/features/home/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../auth/auth_controller.dart';
+import 'package:go_router/go_router.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -11,9 +11,6 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider).user;
-    final nombre = (user?['first_name'] as String?)?.trim();
-    final saludo =
-        (nombre?.isNotEmpty ?? false) ? nombre! : (user?['username'] ?? '');
 
     return Scaffold(
       appBar: AppBar(
@@ -31,49 +28,46 @@ class HomeScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text('Hola, $saludo',
-              style:
-                  const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+          Text(
+            'Hola, ${user?['first_name'] ?? user?['username'] ?? ''}',
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 14),
 
-          const SizedBox(height: 16),
-
-          // Accesos rápidos en grid
-          GridView(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, // 2 por fila
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.35,
-            ),
+          // Accesos rápidos
+          Row(
             children: [
               _QuickAction(
                 icon: Icons.add_circle_outline,
                 label: 'Nueva solicitud',
                 onTap: () => context.go('/solicitudes/new'),
               ),
+              const SizedBox(width: 12),
               _QuickAction(
                 icon: Icons.description_outlined,
                 label: 'Mis solicitudes',
                 onTap: () => context.go('/solicitudes'),
               ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
               _QuickAction(
                 icon: Icons.person_outline,
                 label: 'Mi perfil',
-                onTap: () => context.go('/profile'),
+                onTap: () => context.go('/perfil'), // <- aquí estaba el fallo
               ),
+              const SizedBox(width: 12),
               _QuickAction(
                 icon: Icons.notifications_outlined,
                 label: 'Notificaciones',
-                onTap: () => context.go('/notifications'),
+                onTap: () => context.go('/notificaciones'),
               ),
             ],
           ),
 
           const SizedBox(height: 24),
-
-          // Tips
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -103,29 +97,28 @@ class _QuickAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: const [
-            BoxShadow(
-                color: Colors.black12, blurRadius: 10, offset: Offset(0, 2)),
-          ],
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 28),
-            const SizedBox(height: 10),
-            Text(label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    color: AppColors.muted, fontWeight: FontWeight.w600)),
-          ],
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          height: 90,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                  color: Colors.black12, blurRadius: 8, offset: Offset(0, 2))
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon),
+              const SizedBox(height: 6),
+              Text(label, style: TextStyle(color: AppColors.muted)),
+            ],
+          ),
         ),
       ),
     );
