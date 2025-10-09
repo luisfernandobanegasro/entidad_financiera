@@ -146,12 +146,8 @@ class UserViewSet(viewsets.ModelViewSet):
                 settings.DEFAULT_FROM_EMAIL, [email], fail_silently=False,
             )
         except User.DoesNotExist:
-            # No revelar existencia del correo
             pass
-        return Response(
-            {"message": "Si el email existe, recibirás un enlace para restablecer tu contraseña."},
-            status=status.HTTP_200_OK
-        )
+        return Response({"message": "Si el email existe, recibirás un enlace para restablecer tu contraseña."}, status=200)
 
     @action(detail=False, methods=['post'])
     def password_reset_confirm(self, request, uidb64, token):
@@ -170,7 +166,6 @@ class UserViewSet(viewsets.ModelViewSet):
         user.save()
         return Response({"message": "Contraseña restablecida exitosamente."}, status=200)
 
-    # Utilidad
     def get_client_ip(self, request):
         xff = request.META.get('HTTP_X_FORWARDED_FOR')
         return xff.split(',')[0] if xff else request.META.get('REMOTE_ADDR')
@@ -182,7 +177,6 @@ class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.all()
     serializer_class = ClienteSerializer
     permission_classes = [IsAuthenticated]
-
 
 class EmpleadoViewSet(viewsets.ModelViewSet):
     queryset = Empleado.objects.all()
@@ -228,18 +222,15 @@ class RolViewSet(viewsets.ModelViewSet):
         except (Permiso.DoesNotExist, RolPermiso.DoesNotExist):
             return Response({"error": "Permiso no encontrado o no asignado."}, status=404)
 
-
 class PermisoViewSet(viewsets.ModelViewSet):
     queryset = Permiso.objects.all()
     serializer_class = PermisoSerializer
     permission_classes = [IsAuthenticated]
 
-
 class RolPermisoViewSet(viewsets.ModelViewSet):
     queryset = RolPermiso.objects.all()
     serializer_class = RolPermisoSerializer
     permission_classes = [IsAuthenticated]
-
 
 class UserProfileViewSet(viewsets.ModelViewSet):
     queryset = UserProfile.objects.all()
@@ -248,7 +239,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         with transaction.atomic():
-            up = serializer.save()
+            serializer.save()
             Bitacora.objects.create(
                 usuario=self.request.user,
                 tipo_accion="CREAR_PERFIL_USUARIO",
@@ -257,7 +248,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         with transaction.atomic():
-            up = serializer.save()
+            serializer.save()
             Bitacora.objects.create(
                 usuario=self.request.user,
                 tipo_accion="ACTUALIZAR_PERFIL_USUARIO",
@@ -346,13 +337,9 @@ class SolicitudCreditoViewSet(viewsets.ModelViewSet):
         sol.save()
         return Response(SolicitudDetailSerializer(sol).data)
 
-    # ---- Checklist para front (CU19 helper) ----
+    # ---- Checklist para front ----
     @action(detail=True, methods=['get'], url_path='documentos/checklist')
     def checklist(self, request, pk=None):
-        """
-        Devuelve un arreglo con el estado de cada documento requerido
-        según producto y tipo_trabajador de la solicitud.
-        """
         sol = self.get_object()
         if not sol.producto or not sol.tipo_trabajador:
             return Response({'detail': 'Solicitud sin producto o tipo_trabajador'}, status=400)
@@ -372,7 +359,6 @@ class SolicitudCreditoViewSet(viewsets.ModelViewSet):
                 'recibido': bool(a),
                 'valido': None if not a else a.valido,
                 'motivo': None if not a else (a.observacion or None),
-                # extras para front
                 'adjunto_id': None if not a else a.id,
                 'archivo_url': None if not a or not a.archivo else a.archivo.url,
                 'fecha_emision': None if not a else a.fecha_emision,
@@ -389,49 +375,15 @@ class SolicitudCreditoViewSet(viewsets.ModelViewSet):
         ]
         return Response({'estadoActual': sol.estado, 'timelineEstados': timeline})
 
-# =========================================================
-#                    PLAN DE PAGO (CU15)
-# =========================================================
-class PlanPagoGenerateView(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated, IsOfficialOrAdmin]
-
-    # POST /api/solicitudes/<solicitud_id>/plan-pagos/generar/
-    def create(self, request, solicitud_id=None):
-        overwrite = str(request.query_params.get('overwrite', 'false')).lower() == 'true'
-        try:
-            sol = SolicitudCredito.objects.get(pk=solicitud_id, is_deleted=False)
-            plan = generar_plan(sol, request.user, overwrite=overwrite)
-            return Response({"plan_id": str(plan.id)}, status=201)
-        except SolicitudCredito.DoesNotExist:
-            return Response({"detail": "Solicitud no encontrada"}, status=404)
-        except ValueError as e:
-            return Response({"detail": str(e)}, status=409)
-
-class PlanPagoDetailView(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
-
-    # GET /api/solicitudes/<solicitud_id>/plan-pagos/
-    def list(self, request, solicitud_id=None):
-        try:
-            plan = (PlanPago.objects
-                    .select_related('solicitud')
-                    .prefetch_related('cuotas')
-                    .get(solicitud_id=solicitud_id))
-        except PlanPago.DoesNotExist:
-            return Response({"detail": "Plan no encontrado"}, status=404)
-        return Response(PlanPagoDTO(plan).data)
-
-class PlanPagoExportView(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
-
-    # GET /api/solicitudes/<solicitud_id>/plan-pagos/export?format=pdf|xlsx
-    def list(self, request, solicitud_id=None):
+    # ---- Exportar plan (PDF/XLSX) ----
+    @action(detail=True, methods=['get'], url_path='plan-pagos/export', permission_classes=[IsAuthenticated])
+    def export_plan(self, request, pk=None):
         fmt = (request.query_params.get('format') or 'pdf').lower()
         try:
             plan = (PlanPago.objects
                     .select_related('solicitud')
                     .prefetch_related('cuotas')
-                    .get(solicitud_id=solicitud_id))
+                    .get(solicitud_id=pk))
         except PlanPago.DoesNotExist:
             return Response({"detail": "Plan no encontrado"}, status=404)
 
@@ -483,11 +435,42 @@ class PlanPagoExportView(viewsets.ViewSet):
         return resp
 
 # =========================================================
+#                    PLAN DE PAGO (CU15)
+# =========================================================
+class PlanPagoGenerateView(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated, IsOfficialOrAdmin]
+
+    def create(self, request, solicitud_id=None):
+        overwrite = str(request.query_params.get('overwrite', 'false')).lower() == 'true'
+        try:
+            sol = SolicitudCredito.objects.get(pk=solicitud_id, is_deleted=False)
+            plan = generar_plan(sol, request.user, overwrite=overwrite)
+            return Response({"plan_id": str(plan.id)}, status=201)
+        except SolicitudCredito.DoesNotExist:
+            return Response({"detail": "Solicitud no encontrada"}, status=404)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=409)
+
+class PlanPagoDetailView(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request, solicitud_id=None):
+        try:
+            plan = (PlanPago.objects
+                    .select_related('solicitud')
+                    .prefetch_related('cuotas')
+                    .get(solicitud_id=solicitud_id))
+        except PlanPago.DoesNotExist:
+            return Response({"detail": "Plan no encontrado"}, status=404)
+        return Response(PlanPagoDTO(plan).data)
+
+# (Ojo: NO hay PlanPagoExportView; la exportación la maneja export_plan de SolicitudCreditoViewSet)
+
+# =========================================================
 #                     REGISTRO PÚBLICO
 # =========================================================
 class PublicRegisterView(APIView):
     permission_classes = [AllowAny]
-
     def post(self, request):
         ser = PublicRegisterSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -499,8 +482,6 @@ class PublicRegisterView(APIView):
 # =========================================================
 class SimuladorAPIView(APIView):
     permission_classes = [permissions.AllowAny]
-
-    # POST /api/simulador/   <- OJO: ruta con barra final en urls.py
     def post(self, request):
         try:
             monto = float(request.data.get('monto'))
@@ -509,7 +490,6 @@ class SimuladorAPIView(APIView):
             primera = request.data.get('primera_cuota_fecha')  # opcional ISO
         except Exception:
             return Response({'detail': 'Parámetros inválidos'}, status=400)
-
         plan, cuotas = simular_plan(monto, plazo, tna, primera)
         return Response({'resumen': plan, 'cuotas': cuotas})
 
@@ -519,17 +499,13 @@ class SimuladorAPIView(APIView):
 class ProductoFinancieroViewSet(viewsets.ModelViewSet):
     queryset = ProductoFinanciero.objects.all()
     serializer_class = ProductoFinancieroSerializer
-    permission_classes = [IsAuthenticated]  # o IsOfficialOrAdmin
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['get'], url_path='requisitos', permission_classes=[permissions.AllowAny])
     def requisitos(self, request, pk=None):
-        """
-        Devuelve un ARRAY de requisitos para compatibilidad con el front.
-        """
         tipo = request.query_params.get('tipo_trabajador')
         if tipo not in ['PUBLICO', 'PRIVADO', 'INDEPENDIENTE']:
             return Response({'detail': 'tipo_trabajador inválido'}, status=400)
-
         producto = self.get_object()
         reqs = (RequisitoProductoDocumento.objects
                 .select_related('documento')
@@ -591,7 +567,6 @@ class DocumentoAdjuntoViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         adj = serializer.save()
 
-        # Validación de vigencia automática
         doc_tipo = adj.documento_tipo
         is_valid, motivo = validar_vigencia(adj.fecha_emision, doc_tipo.vigencia_dias)
         adj.valido = is_valid
@@ -602,7 +577,6 @@ class DocumentoAdjuntoViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(adj).data, status=201, headers=headers)
 
     def update(self, request, *args, **kwargs):
-        """Reemplazo total del adjunto: revalida vigencia."""
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
@@ -620,15 +594,13 @@ class DocumentoAdjuntoViewSet(viewsets.ModelViewSet):
         kwargs['partial'] = True
         return self.update(request, *args, **kwargs)
 
-    # En tu DocumentoAdjuntoViewSet
-def destroy(self, request, *args, **kwargs):
-    instance = self.get_object()
-    # borra el archivo del storage si existe
-    f = instance.archivo
-    resp = super().destroy(request, *args, **kwargs)
-    try:
-        if f and f.storage.exists(f.name):
-            f.storage.delete(f.name)
-    except Exception:
-        pass
-    return resp
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        f = instance.archivo
+        resp = super().destroy(request, *args, **kwargs)
+        try:
+            if f and f.storage.exists(f.name):
+                f.storage.delete(f.name)
+        except Exception:
+            pass
+        return resp
