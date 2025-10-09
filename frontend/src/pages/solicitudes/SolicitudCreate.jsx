@@ -1,106 +1,342 @@
-import React, { useEffect, useState } from 'react';
+// src/pages/solicitudes/SolicitudCreate.jsx
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import { fetchClientes } from '../../services/clientes';
 import { createSolicitud } from '../../services/solicitudes';
-import { useNavigate } from 'react-router-dom';
+import { getProductos, getRequisitos } from '../../services/productos';
+
+const TIPOS_TRAB = ['PUBLICO', 'PRIVADO', 'INDEPENDIENTE'];
 
 export default function SolicitudCreate() {
   const nav = useNavigate();
+
+  // catálogos
   const [clientes, setClientes] = useState([]);
+  const [productos, setProductos] = useState([]);
   const [loadingClientes, setLoadingClientes] = useState(true);
+  const [loadingProductos, setLoadingProductos] = useState(true);
   const [errCli, setErrCli] = useState('');
+  const [errProd, setErrProd] = useState('');
 
-  const [form, setForm] = useState({
-    cliente: '',
-    monto: '',
-    plazo_meses: '',
-    tasa_nominal_anual: '24.0',
-    moneda: 'BOB',
-  });
+  // selección
+  const [clienteId, setClienteId] = useState('');
+  const [productoId, setProductoId] = useState('');
+  const [tipoTrab, setTipoTrab] = useState('');
+
+  // derivados
+  const productoSel = useMemo(
+    () => productos.find(p => String(p.id) === String(productoId)),
+    [productos, productoId]
+  );
+  const tipoCredito = productoSel?.tipo || '';
+
+  // requisitos dinámicos
+  const [requisitos, setRequisitos] = useState([]);
+  const [loadingReq, setLoadingReq] = useState(false);
+  const [errorReq, setErrorReq] = useState('');
+
+  // datos de crédito (opcionales)
+  const [mostrarDatosCredito, setMostrarDatosCredito] = useState(false);
+  const [monto, setMonto] = useState('');
+  const [plazo, setPlazo] = useState('');
+  const [tna, setTna] = useState('24.0');
+  const [moneda, setMoneda] = useState('BOB');
+
+  // submit
   const [submitting, setSubmitting] = useState(false);
-  const [err, setErr] = useState('');
+  const [errSubmit, setErrSubmit] = useState('');
 
+  // =======================
+  // Cargar catálogos
+  // =======================
   useEffect(() => {
-    let mounted = true;
     (async () => {
       try {
-        setLoadingClientes(true);
-        const data = await fetchClientes(); // devuelve array con id
-        if (!mounted) return;
-        setClientes(data);
-      } catch (e) {
-        setErrCli('No se pudieron cargar clientes');
+        const cs = await fetchClientes();
+        setClientes(cs || []);
+      } catch {
+        setErrCli('No se pudieron cargar clientes.');
       } finally {
         setLoadingClientes(false);
       }
     })();
-    return () => { mounted = false; };
+
+    (async () => {
+      try {
+        const ps = await getProductos();
+        setProductos(ps || []);
+      } catch {
+        setErrProd('No se pudieron cargar productos.');
+      } finally {
+        setLoadingProductos(false);
+      }
+    })();
   }, []);
 
-  const handle = e => setForm({ ...form, [e.target.name]: e.target.value });
+  // =======================
+  // Cargar requisitos
+  // =======================
+  useEffect(() => {
+    let cancelled = false;
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setErr('');
+    async function load() {
+      if (!productoId || !tipoTrab) {
+        setRequisitos([]);
+        return;
+      }
+      setLoadingReq(true);
+      setErrorReq('');
+      try {
+        const items = await getRequisitos(productoId, tipoTrab); // GET /productos/:id/requisitos/?tipo_trabajador=...
+        if (!cancelled) setRequisitos(items || []);
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          setErrorReq('Error al cargar requisitos.');
+          setRequisitos([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingReq(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [productoId, tipoTrab]);
+
+  // =======================
+  // Crear solicitud
+  // =======================
+  const onCrear = async () => {
+    setErrSubmit('');
+
+    // Validación mínima de UI
+    if (!clienteId) return setErrSubmit('Selecciona un cliente.');
+    if (!productoId) return setErrSubmit('Selecciona un producto.');
+    if (!tipoTrab)  return setErrSubmit('Selecciona un tipo de trabajador.');
+
     setSubmitting(true);
     try {
       const payload = {
-        ...form,
-        cliente: Number(form.cliente),
-        monto: Number(form.monto),
-        plazo_meses: Number(form.plazo_meses),
-        tasa_nominal_anual: Number(form.tasa_nominal_anual),
+        cliente: Number(clienteId),
+        producto: Number(productoId),
+        tipo_trabajador: tipoTrab,     // 'PUBLICO' | 'PRIVADO' | 'INDEPENDIENTE'
+        tipo_credito: tipoCredito || undefined, // si tu modelo lo admite
+
+        // Si tu serializer exige estos campos, envíalos con defaults razonables
+        monto: monto ? Number(monto) : 1,
+        plazo_meses: plazo ? Number(plazo) : 1,
+        tasa_nominal_anual: tna ? Number(tna) : 0,
+        moneda: moneda || 'BOB',
       };
-      const created = await createSolicitud(payload);
-      nav(`/solicitudes/${created.id}`);
+
+      const s = await createSolicitud(payload); // POST /api/solicitudes/
+      // Navegar directo al checklist (CU19/CU13)
+      nav(`/solicitudes/${s.id}/checklist`);
     } catch (e) {
-      setErr(JSON.stringify(e.response?.data || 'Error', null, 2));
+      console.error(e);
+      // intenta mostrar mensaje del backend
+      const apiMsg =
+        e?.response?.data?.detail ||
+        e?.response?.data?.non_field_errors?.[0] ||
+        JSON.stringify(e?.response?.data || {});
+      setErrSubmit(apiMsg || 'No se pudo crear la solicitud.');
     } finally {
       setSubmitting(false);
     }
   };
 
+  // =======================
+  // UI
+  // =======================
   return (
-    <div style={{maxWidth:560}}>
-      <h2>Nueva Solicitud (interno)</h2>
-      <form onSubmit={submit} className="form-grid">
+    <div style={{ maxWidth: 820 }}>
+      <h2>Nueva Solicitud</h2>
+
+      {/* Cliente */}
+      <div className="panel">
         <label>Cliente</label>
         {loadingClientes ? (
           <div>Cargando clientes…</div>
         ) : (
-          <select name="cliente" value={form.cliente} onChange={handle} required>
+          <select
+            className="input"
+            value={clienteId}
+            onChange={e => setClienteId(e.target.value)}
+          >
             <option value="">-- Selecciona --</option>
             {clientes.map(c => (
               <option key={c.id} value={c.id}>
-                {c.user_info?.first_name} {c.user_info?.last_name} — #{c.id}
+                {(c.user_info?.first_name || '')} {(c.user_info?.last_name || '')} — #{c.id}
               </option>
             ))}
           </select>
         )}
-        {errCli && <div style={{color:'crimson'}}>{errCli}</div>}
+        {errCli && <div style={{ color: 'crimson' }}>{errCli}</div>}
+      </div>
 
-        <label>Monto</label>
-        <input name="monto" value={form.monto} onChange={handle} required />
+      {/* Producto */}
+      <div className="panel">
+        <label>Producto</label>
+        {loadingProductos ? (
+          <div>Cargando productos…</div>
+        ) : (
+          <select
+            className="input"
+            value={productoId}
+            onChange={e => setProductoId(e.target.value)}
+          >
+            <option value="">-- Selecciona --</option>
+            {productos.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.nombre} ({p.tipo})
+              </option>
+            ))}
+          </select>
+        )}
+        {errProd && <div style={{ color: 'crimson' }}>{errProd}</div>}
+      </div>
 
-        <label>Plazo (meses)</label>
-        <input name="plazo_meses" value={form.plazo_meses} onChange={handle} required />
+      {/* Tipo de trabajador */}
+      <div className="panel">
+        <label>Tipo de Trabajador</label>
+        <select
+          className="input"
+          value={tipoTrab}
+          onChange={e => setTipoTrab(e.target.value)}
+        >
+          <option value="">-- Selecciona --</option>
+          {TIPOS_TRAB.map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
 
-        <label>Tasa nominal anual (%)</label>
-        <input name="tasa_nominal_anual" value={form.tasa_nominal_anual} onChange={handle} />
+      {/* Requisitos dinámicos */}
+      {!!productoId && !!tipoTrab && (
+        <div className="panel">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0 }}>Documentos requeridos</h3>
+            <div style={{ opacity: .7 }}>
+              Tipo de crédito: <b>{tipoCredito || '-'}</b>
+            </div>
+          </div>
 
-        <label>Moneda</label>
-        <input name="moneda" value={form.moneda} onChange={handle} />
+          {loadingReq && <div>Cargando requisitos…</div>}
+          {errorReq && <div style={{ color: 'crimson' }}>{errorReq}</div>}
 
-        <div style={{display:'flex',gap:8,marginTop:10}}>
-          <button className="btn" disabled={submitting}>Crear</button>
+          {!loadingReq && requisitos.length === 0 && !errorReq && (
+            <div>No hay requisitos configurados para esta combinación.</div>
+          )}
+
+          {requisitos.length > 0 && (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Documento</th>
+                  <th>Obligatorio</th>
+                  <th>Vigencia (días)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {requisitos.map((r, idx) => (
+                  <tr key={idx}>
+                    <td>
+                      {r.documento?.nombre}{' '}
+                      <small style={{ color: '#6c757d' }}>
+                        ({r.documento?.codigo})
+                      </small>
+                    </td>
+                    <td>{r.obligatorio ? 'Sí' : 'No'}</td>
+                    <td>{r.documento?.vigencia_dias ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {/* Acciones */}
+          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setMostrarDatosCredito(v => !v)}
+            >
+              {mostrarDatosCredito ? 'Ocultar datos de crédito' : 'Completar datos de crédito'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-success"
+              onClick={onCrear}
+              disabled={!clienteId || !productoId || !tipoTrab || submitting}
+            >
+              {submitting ? 'Creando…' : 'Crear y ver checklist'}
+            </button>
+          </div>
         </div>
+      )}
 
-        {err && <pre style={{color:'crimson',whiteSpace:'pre-wrap'}}>{err}</pre>}
-      </form>
+      {/* Datos financieros opcionales */}
+      {mostrarDatosCredito && (
+        <div
+          className="panel"
+          style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(4, 1fr)' }}
+        >
+          <label className="field">
+            <span>Monto</span>
+            <input
+              className="input"
+              type="number"
+              value={monto}
+              onChange={e => setMonto(e.target.value)}
+              min="0"
+            />
+          </label>
+          <label className="field">
+            <span>Plazo (meses)</span>
+            <input
+              className="input"
+              type="number"
+              value={plazo}
+              onChange={e => setPlazo(e.target.value)}
+              min="1"
+            />
+          </label>
+          <label className="field">
+            <span>TNA (%)</span>
+            <input
+              className="input"
+              type="number"
+              step="0.01"
+              value={tna}
+              onChange={e => setTna(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>Moneda</span>
+            <select
+              className="input"
+              value={moneda}
+              onChange={e => setMoneda(e.target.value)}
+            >
+              <option value="BOB">BOB</option>
+              <option value="USD">USD</option>
+            </select>
+          </label>
+        </div>
+      )}
+
+      {errSubmit && <div style={{ color: 'crimson', marginTop: 8 }}>{errSubmit}</div>}
 
       <style>{`
-        .form-grid { display:grid; gap:8px; background:#fff; padding:16px; border-radius:8px; }
-        .form-grid input, .form-grid select { padding:8px; border:1px solid #ddd; border-radius:6px; }
-        .btn { background:#198754;color:#fff;padding:8px 12px;border-radius:6px;border:none; }
+        .panel { background:#fff; padding:12px; border-radius:10px; margin:12px 0; }
+        .input { width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; }
+        .table { width:100%; border-collapse:collapse; }
+        .table th, .table td { border-bottom:1px solid #eee; padding:8px; text-align:left; }
+        .btn { background:#0d6efd; color:#fff; border:none; border-radius:6px; padding:8px 12px; cursor:pointer; }
+        .btn-success { background:#198754; }
+        .field { display:flex; flex-direction:column; gap:6px; }
       `}</style>
     </div>
   );

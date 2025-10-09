@@ -113,7 +113,16 @@ export default function Sidebar() {
           <span className="sidebar__icon">➕</span>
           {!collapsed && <span>Nueva solicitud</span>}
         </NavLink>
+        <NavLink to="/simulador" className="sidebar__link">
+          <span className="sidebar__icon">🧮</span>
+          {!collapsed && <span>Simulador</span>}
+        </NavLink>
         
+        <NavLink to="/productos/requisitos" className="sidebar__link">
+          <span className="sidebar__icon">🧩</span>
+          {!collapsed && <span>Editor de requisitos</span>}
+        </NavLink>
+
         {/* Cerrar sesión desde el menú lateral */}
         <a
           href="/logout"

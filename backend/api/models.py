@@ -124,6 +124,7 @@ class SolicitudCredito(models.Model):
         ('APROBADA', 'Aprobada'),
         ('RECHAZADA', 'Rechazada'),
     ]
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     cliente = models.ForeignKey('api.Cliente', on_delete=models.PROTECT, related_name='solicitudes')
     oficial = models.ForeignKey('api.Empleado', on_delete=models.SET_NULL, null=True, blank=True, related_name='solicitudes')
@@ -132,6 +133,12 @@ class SolicitudCredito(models.Model):
     tasa_nominal_anual = models.DecimalField(max_digits=7, decimal_places=4)  # ej. 24.0000
     moneda = models.CharField(max_length=10, default='BOB')
     estado = models.CharField(max_length=10, choices=ESTADOS, default='ENVIADA')
+    
+    TIPO_TRABAJADOR = [('PUBLICO','Público'),('PRIVADO','Privado'),('INDEPENDIENTE','Independiente')]
+    TIPO_CREDITO = [('PERSONAL','Personal'),('VEHICULAR','Vehicular'),('HIPOTECARIO','Hipotecario'),('PYME','Micro/Pequeña Empresa')]
+    producto = models.ForeignKey('ProductoFinanciero', on_delete=models.PROTECT, null=True, blank=True)
+    tipo_credito = models.CharField(max_length=20, choices=TIPO_CREDITO, default='PERSONAL')
+    tipo_trabajador = models.CharField(max_length=20, choices=TIPO_TRABAJADOR, default='PRIVADO')
     # evaluación
     score_riesgo = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     observacion_evaluacion = models.TextField(blank=True, null=True)
@@ -183,3 +190,74 @@ class PlanCuota(models.Model):
         db_table = 'plan_cuota'
         unique_together = (('plan', 'nro_cuota'),)
         ordering = ['nro_cuota']
+
+# === Productos y Requisitos Documentales ===
+
+class ProductoFinanciero(models.Model):
+    TIPOS = [
+        ('PERSONAL', 'Personal/Consumo'),
+        ('VEHICULAR', 'Vehicular'),
+        ('HIPOTECARIO', 'Hipotecario'),
+        ('PYME', 'Micro/Pequeña Empresa'),
+    ]
+    codigo = models.CharField(max_length=30, unique=True)
+    nombre = models.CharField(max_length=120)
+    tipo = models.CharField(max_length=20, choices=TIPOS)
+    tasa_nominal_anual_min = models.DecimalField(max_digits=7, decimal_places=4)
+    tasa_nominal_anual_max = models.DecimalField(max_digits=7, decimal_places=4)
+    plazo_min = models.PositiveIntegerField()
+    plazo_max = models.PositiveIntegerField()
+    monto_min = models.DecimalField(max_digits=14, decimal_places=2)
+    monto_max = models.DecimalField(max_digits=14, decimal_places=2)
+    metodo_amortizacion_default = models.CharField(max_length=20, default='frances')
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'producto_financiero'
+
+    def __str__(self):
+        return f'{self.codigo} - {self.nombre}'
+
+
+class DocumentoTipo(models.Model):
+    codigo = models.CharField(max_length=40, unique=True)  # CI, DOMICILIO, BOLETAS_3M, AFP_1M, EXTRACTOS_6M, PROFORMA_VEH, FOLIO_REAL, AVALUO, etc.
+    nombre = models.CharField(max_length=120)
+    descripcion = models.TextField(blank=True)
+    vigencia_dias = models.PositiveIntegerField(null=True, blank=True)  # 30, 60, 90, etc. (None = sin vigencia)
+
+    class Meta:
+        db_table = 'documento_tipo'
+
+    def __str__(self):
+        return f'{self.codigo} - {self.nombre}'
+
+
+class RequisitoProductoDocumento(models.Model):
+    TRABAJADOR = [('PUBLICO','Público'),('PRIVADO','Privado'),('INDEPENDIENTE','Independiente')]
+    producto = models.ForeignKey(ProductoFinanciero, on_delete=models.CASCADE, related_name='requisitos')
+    tipo_trabajador = models.CharField(max_length=20, choices=TRABAJADOR)
+    documento = models.ForeignKey(DocumentoTipo, on_delete=models.CASCADE)
+    obligatorio = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'req_prod_doc'
+        unique_together = (('producto','tipo_trabajador','documento'),)
+
+    def __str__(self):
+        return f'{self.producto.codigo} - {self.tipo_trabajador} - {self.documento.codigo}'
+
+class DocumentoAdjunto(models.Model):
+    solicitud = models.ForeignKey(SolicitudCredito, on_delete=models.CASCADE, related_name='documentos')
+    documento_tipo = models.ForeignKey(DocumentoTipo, on_delete=models.PROTECT)
+    archivo = models.FileField(upload_to='solicitudes/%Y/%m/')
+    fecha_emision = models.DateField(null=True, blank=True)
+    fecha_vencimiento = models.DateField(null=True, blank=True)
+    valido = models.BooleanField(default=None, null=True)
+    observacion = models.TextField(blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'documento_adjunto'
+
+    def __str__(self):
+        return f'{self.solicitud_id} - {self.documento_tipo.codigo}'

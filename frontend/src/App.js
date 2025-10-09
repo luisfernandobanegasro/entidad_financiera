@@ -1,221 +1,219 @@
 // src/App.js
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
+import api, { setTokenPair, clearTokenPair } from './config/axios';
+
+// Layouts
+import Layout from './components/Layout/Layout';
+import AuthLayout from './components/Auth/AuthLayout';
+import RequireAuth from './components/Auth/RequireAuth';
+
+// Auth
 import Login from './components/Login/Login';
-import Logout from './components/Logout/Logout';
 import PasswordReset from './components/PasswordReset/PasswordReset';
+
+// Gestión (si las usas)
+import Dashboard from './components/Dashboard/Dashboard';
 import UserManagement from './components/UserManagement/UserManagement';
 import RoleManagement from './components/RoleManagement/RoleManagement';
-import Dashboard from './components/Dashboard/Dashboard';
 import ClientManagement from './components/ClientManagement/ClientManagement';
 import EmployeeManagement from './components/EmployeeManagement/EmployeeManagement';
 
-import Layout from './components/Layout/Layout';
-import AuthLayout from './components/Auth/AuthLayout';
-
-import './App.css';
-
-// 👇 importa las páginas de Solicitudes
+// Solicitudes
 import SolicitudesList from './pages/solicitudes/SolicitudesList';
 import SolicitudCreate from './pages/solicitudes/SolicitudCreate';
 import SolicitudDetail from './pages/solicitudes/SolicitudDetail';
+import SolicitudChecklist from './pages/solicitudes/SolicitudChecklist';
 import PlanView from './pages/solicitudes/PlanView';
+import Simulador from './pages/solicitudes/Simulador';
+
+// Productos
+import RequisitosEditor from './pages/productos/RequisitosEditor';
+
+import './App.css';
 
 function App() {
+  const [authLoading, setAuthLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userRole, setUserRole] = useState(null);
-  const [loading, setLoading] = useState(true);
 
+  // Verifica sesión al montar
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      verifyToken();
-    } else {
-      setLoading(false);
-    }
+    const verify = async () => {
+      try {
+        // Si no hay token, salimos rápido
+        const token =
+          localStorage.getItem('access_token') ||
+          localStorage.getItem('access');
+        if (!token) {
+          setIsAuthenticated(false);
+          return;
+        }
+        // Llama SIEMPRE a /api/users/me/
+        await api.get('/users/me/');
+        setIsAuthenticated(true);
+      } catch (err) {
+        // Limpia todo si falla
+        clearTokenPair();
+        setIsAuthenticated(false);
+        // (opcional) console.warn('Verificación falló:', err);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+    verify();
   }, []);
 
-  const verifyToken = async () => {
-    try {
-      await axios.get('http://localhost:8000/api/users/');
-      setIsAuthenticated(true);
-    } catch (error) {
-      console.error('Token verification failed:', error);
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      delete axios.defaults.headers.common['Authorization'];
-      setIsAuthenticated(false);
-    } finally {
-      setLoading(false);
+  const handleLoginSuccess = (tokens) => {
+    // si tu login te entrega tokens, guárdalos
+    if (tokens?.access || tokens?.refresh) {
+      setTokenPair(tokens);
     }
-  };
-
-  const handleLoginSuccess = () => setIsAuthenticated(true);
-  const handleLogoutSuccess = () => { setIsAuthenticated(false); setUserRole(null); };
-
-  if (loading) return <div className="loading">Cargando...</div>;
-
-  const AppRoutes = () => {
-    const location = useLocation();
-    const isAuthPage = location.pathname === "/login" || location.pathname === "/password-reset";
-
-    return (
-      <div className="App">
-        {!isAuthPage && (
-          <header className="App-header">
-            <h1>Gestión de Solicitudes de Crédito</h1>
-          </header>
-        )}
-
-        <main className="App-main">
-          <Routes>
-            {/* Raíz -> redirige según sesión (opcional: a /solicitudes) */}
-            <Route
-              path="/"
-              element={
-                isAuthenticated
-                  ? <Navigate to="/solicitudes" replace />
-                  : <Navigate to="/login" replace />
-              }
-            />
-
-            {/* Públicas */}
-            <Route
-              path="/login"
-              element={
-                isAuthenticated
-                  ? <Navigate to="/solicitudes" replace />
-                  : (
-                    <AuthLayout>
-                      <Login onLoginSuccess={handleLoginSuccess} />
-                    </AuthLayout>
-                  )
-              }
-            />
-            <Route
-              path="/password-reset"
-              element={
-                isAuthenticated
-                  ? <Navigate to="/solicitudes" replace />
-                  : (
-                    <AuthLayout>
-                      <PasswordReset />
-                    </AuthLayout>
-                  )
-              }
-            />
-
-            {/* Protegidas */}
-            {isAuthenticated && (
-              <>
-                <Route
-                  path="/dashboard"
-                  element={
-                    <Layout>
-                      <Dashboard />
-                    </Layout>
-                  }
-                />
-
-                <Route
-                  path="/users"
-                  element={
-                    <Layout>
-                      <UserManagement />
-                    </Layout>
-                  }
-                />
-                <Route
-                  path="/roles"
-                  element={
-                    <Layout>
-                      <RoleManagement />
-                    </Layout>
-                  }
-                />
-                <Route
-                  path="/clientes"
-                  element={
-                    <Layout>
-                      <ClientManagement />
-                    </Layout>
-                  }
-                />
-                <Route
-                  path="/empleados"
-                  element={
-                    <Layout>
-                      <EmployeeManagement />
-                    </Layout>
-                  }
-                />
-
-                {/* 👇 NUEVAS RUTAS DE SOLICITUDES */}
-                <Route
-                  path="/solicitudes"
-                  element={
-                    <Layout>
-                      <SolicitudesList />
-                    </Layout>
-                  }
-                />
-                <Route
-                  path="/solicitudes/nueva"
-                  element={
-                    <Layout>
-                      <SolicitudCreate />
-                    </Layout>
-                  }
-                />
-                <Route
-                  path="/solicitudes/:id"
-                  element={
-                    <Layout>
-                      <SolicitudDetail />
-                    </Layout>
-                  }
-                />
-                <Route
-                  path="/solicitudes/:id/plan"
-                  element={
-                    <Layout>
-                      <PlanView />
-                    </Layout>
-                  }
-                />
-
-                {/* 404 protegido */}
-                <Route
-                  path="*"
-                  element={
-                    <Layout>
-                      <div style={{ padding: 24 }}>
-                        <h2>Página no encontrada</h2>
-                        <p>Usa el menú de la izquierda para navegar.</p>
-                      </div>
-                    </Layout>
-                  }
-                />
-              </>
-            )}
-          </Routes>
-        </main>
-
-        {isAuthenticated && (
-          <footer className="App-footer">
-            <p>&copy; {new Date().getFullYear()} Sistema de Gestión de Créditos</p>
-          </footer>
-        )}
-      </div>
-    );
+    setIsAuthenticated(true);
   };
 
   return (
     <Router>
-      <AppRoutes />
+      <Routes>
+        {/* Home */}
+        <Route
+          path="/"
+          element={isAuthenticated ? <Navigate to="/solicitudes" replace /> : <Navigate to="/login" replace />}
+        />
+
+        {/* Públicas */}
+        <Route
+          path="/login"
+          element={
+            isAuthenticated
+              ? <Navigate to="/solicitudes" replace />
+              : (
+                <AuthLayout>
+                  <Login onLoginSuccess={handleLoginSuccess} />
+                </AuthLayout>
+              )
+          }
+        />
+        <Route
+          path="/password-reset"
+          element={
+            isAuthenticated
+              ? <Navigate to="/solicitudes" replace />
+              : (
+                <AuthLayout>
+                  <PasswordReset />
+                </AuthLayout>
+              )
+          }
+        />
+
+        {/* Protegidas (siempre registradas; se protegen con RequireAuth) */}
+        <Route
+          path="/dashboard"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><Dashboard /></Layout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/users"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><UserManagement /></Layout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/roles"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><RoleManagement /></Layout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/clientes"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><ClientManagement /></Layout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/empleados"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><EmployeeManagement /></Layout>
+            </RequireAuth>
+          }
+        />
+
+        {/* CU11 Simulador */}
+        <Route
+          path="/simulador"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><Simulador /></Layout>
+            </RequireAuth>
+          }
+        />
+
+        {/* Solicitudes */}
+        <Route
+          path="/solicitudes"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><SolicitudesList /></Layout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/solicitudes/nueva"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><SolicitudCreate /></Layout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/solicitudes/:id"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><SolicitudDetail /></Layout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/solicitudes/:id/checklist"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><SolicitudChecklist /></Layout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/solicitudes/:id/plan"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><PlanView /></Layout>
+            </RequireAuth>
+          }
+        />
+
+        {/* Editor de requisitos */}
+        <Route
+          path="/productos/requisitos"
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><RequisitosEditor /></Layout>
+            </RequireAuth>
+          }
+        />
+
+        {/* 404 */}
+        <Route path="*" element={<div style={{ padding: 24 }}>Página no encontrada.</div>} />
+      </Routes>
     </Router>
   );
 }

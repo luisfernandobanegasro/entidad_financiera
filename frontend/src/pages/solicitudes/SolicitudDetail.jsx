@@ -31,25 +31,30 @@ export default function SolicitudDetail() {
     load();
   }, [load]);
 
-  const doEvaluar = async () => {
-    try {
-      setErrEval('');
-      await evaluarSolicitud(id, { score_riesgo: score, observacion: obs });
-      await load();
-    } catch (e) {
-      setErrEval(String(e));
-    }
-  };
+  // src/pages/solicitudes/SolicitudDetail.jsx
+const doEvaluar = async () => {
+  try {
+    setErrEval('');
+    await evaluarSolicitud(id, {
+      score_riesgo: Number(score),                   // ← opcional, pero recomendado
+      observacion_evaluacion: obs || '',
+    });
+    await load();
+  } catch (e) {
+    setErrEval(String(e?.response?.data?.detail || e));
+  }
+};
 
-  const doDecidir = async (decision) => {
-    try {
-      setErrDec('');
-      await decidirSolicitud(id, { decision }); // 'APROBAR' | 'RECHAZAR'
-      await load();
-    } catch (e) {
-      setErrDec(String(e));
-    }
-  };
+const doDecidir = async (decision) => {
+  try {
+    setErrDec('');
+    await decidirSolicitud(id, decision);           // ← pasa el string plano
+    await load();
+  } catch (e) {
+    setErrDec(String(e?.response?.data?.detail || e));
+  }
+};
+
 
   if (loading) return <div>Cargando…</div>;
   if (err) return <div style={{ color: 'crimson' }}>{err}</div>;
@@ -142,6 +147,16 @@ export default function SolicitudDetail() {
         <div className="panel">
           <h4>Plan de pago (CU15)</h4>
           <Link className="btn" to={`/solicitudes/${id}/plan`}>Abrir plan</Link>
+        </div>
+
+        <div className="panel">
+          <h4>Documentación (CU19/CU13)</h4>
+          <Link className="btn" to={`/solicitudes/${id}/checklist`}>Abrir checklist</Link>
+        </div>
+
+        <div className="panel">
+          <h4>Seguimiento (CU16)</h4>
+          <Link className="btn" to={`/solicitudes/${id}/seguimiento`}>Ver seguimiento</Link>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
+// src/pages/solicitudes/PlanView.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { generarPlan, getPlan, getPlanExportUrl } from '../../services/plan';
+import { generarPlan, getPlan, downloadPlan } from '../../services/plan';
 
 export default function PlanView() {
   const { id: solicitudId } = useParams();
@@ -11,29 +12,39 @@ export default function PlanView() {
   const [genErr, setGenErr] = useState('');
 
   const reload = async () => {
-    setErr(''); setLoading(true);
+    setErr('');
+    setLoading(true);
     try {
       const data = await getPlan(solicitudId);
       setPlan(data);
-    } catch (e) {
-      setErr('Sin plan generado aún.');
+    } catch {
       setPlan(null);
+      setErr('Sin plan generado aún.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [solicitudId]);
+  useEffect(() => { reload(); }, [solicitudId]);
 
-  const doGenerar = async (overwrite=false) => {
-    setGenErr(''); setGenBusy(true);
+  const doGenerar = async (overwrite = false) => {
+    setGenErr('');
+    setGenBusy(true);
     try {
       await generarPlan(solicitudId, { overwrite });
       await reload();
     } catch (e) {
-      setGenErr(e.response?.data?.detail || 'Error al generar plan');
+      setGenErr(e?.response?.data?.detail || 'Error al generar plan');
     } finally {
       setGenBusy(false);
+    }
+  };
+
+  const doExport = async (fmt) => {
+    try {
+      await downloadPlan(solicitudId, fmt); // 'pdf' | 'xlsx'
+    } catch {
+      setErr('No se pudo exportar el plan.');
     }
   };
 
@@ -51,13 +62,17 @@ export default function PlanView() {
       <h2>Plan de Pagos — Solicitud {solicitudId}</h2>
 
       <div className="panel">
-        <button onClick={()=>doGenerar(false)} disabled={genBusy}>Generar</button>
-        <button onClick={()=>doGenerar(true)} disabled={genBusy} title="Recalcular y sobrescribir">Regenerar (overwrite)</button>
+        <button onClick={() => doGenerar(false)} disabled={genBusy}>Generar</button>
+        <button onClick={() => doGenerar(true)}  disabled={genBusy} title="Recalcular y sobrescribir">
+          Regenerar (overwrite)
+        </button>
+        <button onClick={() => doExport('pdf')}  disabled={!plan}>Exportar PDF</button>
+        <button onClick={() => doExport('xlsx')} disabled={!plan}>Exportar XLSX</button>
         {genErr && <div className="err">{genErr}</div>}
       </div>
 
       {loading && <div>Cargando…</div>}
-      {err && !plan && <div style={{color:'#6c757d'}}>{err}</div>}
+      {err && !plan && <div style={{ color: '#6c757d' }}>{err}</div>}
 
       {plan && (
         <>
@@ -75,7 +90,7 @@ export default function PlanView() {
                 </tr>
               </thead>
               <tbody>
-                {plan.cuotas?.map(c => (
+                {plan.cuotas?.map((c) => (
                   <tr key={c.nro_cuota}>
                     <td>{c.nro_cuota}</td>
                     <td>{c.fecha_vencimiento}</td>
@@ -88,7 +103,7 @@ export default function PlanView() {
               </tbody>
               <tfoot>
                 <tr>
-                  <th colSpan={2} style={{textAlign:'right'}}>Totales</th>
+                  <th colSpan={2} style={{ textAlign: 'right' }}>Totales</th>
                   <th>{totales.capital}</th>
                   <th>{totales.interes}</th>
                   <th>{totales.cuotas}</th>
@@ -97,17 +112,12 @@ export default function PlanView() {
               </tfoot>
             </table>
           </div>
-
-          <div className="panel">
-            <a className="btn" href={getPlanExportUrl(solicitudId, 'pdf')} target="_blank" rel="noreferrer">Exportar PDF</a>
-            <a className="btn" href={getPlanExportUrl(solicitudId, 'xlsx')} target="_blank" rel="noreferrer">Exportar XLSX</a>
-          </div>
         </>
       )}
 
       <style>{`
         .panel { background:#fff; padding:12px; border-radius:8px; display:flex; gap:8px; align-items:center; margin-bottom:12px; }
-        .panel button, .btn { background:#0d6efd; color:#fff; border:none; border-radius:6px; padding:8px 12px; text-decoration:none; }
+        .panel button { background:#0d6efd; color:#fff; border:none; border-radius:6px; padding:8px 12px; }
         .card { background:#fff; padding:12px; border-radius:8px; margin-bottom:12px; display:grid; gap:4px; }
         .table-wrap { overflow:auto; }
         .table { width:100%; border-collapse:collapse; background:#fff; }
