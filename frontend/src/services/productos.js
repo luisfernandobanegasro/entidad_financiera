@@ -3,7 +3,7 @@ import api from '../config/axios';
 
 // Lista de productos (CU18 lectura)
 export async function getProductos() {
-  const { data } = await api.get('/api/productos/');
+  const { data } = await api.get('productos/');
   return data;
 }
 

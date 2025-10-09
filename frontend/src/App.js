@@ -13,7 +13,7 @@ import RequireAuth from './components/Auth/RequireAuth';
 import Login from './components/Login/Login';
 import PasswordReset from './components/PasswordReset/PasswordReset';
 
-// Gestión (si las usas)
+// Gestión
 import Dashboard from './components/Dashboard/Dashboard';
 import UserManagement from './components/UserManagement/UserManagement';
 import RoleManagement from './components/RoleManagement/RoleManagement';
@@ -41,7 +41,6 @@ function App() {
   useEffect(() => {
     const verify = async () => {
       try {
-        // Si no hay token, salimos rápido
         const token =
           localStorage.getItem('access_token') ||
           localStorage.getItem('access');
@@ -49,14 +48,12 @@ function App() {
           setIsAuthenticated(false);
           return;
         }
-        // Llama SIEMPRE a /api/users/me/
-        await api.get('/users/me/');
+        // Siempre consulta tu endpoint de perfil
+        await api.get('users/me/');
         setIsAuthenticated(true);
-      } catch (err) {
-        // Limpia todo si falla
+      } catch {
         clearTokenPair();
         setIsAuthenticated(false);
-        // (opcional) console.warn('Verificación falló:', err);
       } finally {
         setAuthLoading(false);
       }
@@ -65,20 +62,21 @@ function App() {
   }, []);
 
   const handleLoginSuccess = (tokens) => {
-    // si tu login te entrega tokens, guárdalos
-    if (tokens?.access || tokens?.refresh) {
-      setTokenPair(tokens);
-    }
+    if (tokens?.access || tokens?.refresh) setTokenPair(tokens);
     setIsAuthenticated(true);
   };
 
   return (
     <Router>
       <Routes>
-        {/* Home */}
+        {/* Root -> Dashboard (protegido) */}
         <Route
           path="/"
-          element={isAuthenticated ? <Navigate to="/solicitudes" replace /> : <Navigate to="/login" replace />}
+          element={
+            <RequireAuth authed={isAuthenticated} loading={authLoading}>
+              <Layout><Dashboard /></Layout>
+            </RequireAuth>
+          }
         />
 
         {/* Públicas */}
@@ -86,7 +84,7 @@ function App() {
           path="/login"
           element={
             isAuthenticated
-              ? <Navigate to="/solicitudes" replace />
+              ? <Navigate to="/" replace />
               : (
                 <AuthLayout>
                   <Login onLoginSuccess={handleLoginSuccess} />
@@ -98,7 +96,7 @@ function App() {
           path="/password-reset"
           element={
             isAuthenticated
-              ? <Navigate to="/solicitudes" replace />
+              ? <Navigate to="/" replace />
               : (
                 <AuthLayout>
                   <PasswordReset />
@@ -107,15 +105,7 @@ function App() {
           }
         />
 
-        {/* Protegidas (siempre registradas; se protegen con RequireAuth) */}
-        <Route
-          path="/dashboard"
-          element={
-            <RequireAuth authed={isAuthenticated} loading={authLoading}>
-              <Layout><Dashboard /></Layout>
-            </RequireAuth>
-          }
-        />
+        {/* Gestión (protegidas) */}
         <Route
           path="/users"
           element={
@@ -149,7 +139,7 @@ function App() {
           }
         />
 
-        {/* CU11 Simulador */}
+        {/* Simulador (protegido) */}
         <Route
           path="/simulador"
           element={
@@ -159,7 +149,7 @@ function App() {
           }
         />
 
-        {/* Solicitudes */}
+        {/* Solicitudes (protegidas) */}
         <Route
           path="/solicitudes"
           element={
@@ -201,7 +191,7 @@ function App() {
           }
         />
 
-        {/* Editor de requisitos */}
+        {/* Editor de requisitos (protegido) */}
         <Route
           path="/productos/requisitos"
           element={
@@ -211,8 +201,15 @@ function App() {
           }
         />
 
-        {/* 404 */}
-        <Route path="*" element={<div style={{ padding: 24 }}>Página no encontrada.</div>} />
+        {/* 404 -> Dashboard o Login según estado */}
+        <Route
+          path="*"
+          element={
+            isAuthenticated
+              ? <Navigate to="/" replace />
+              : <Navigate to="/login" replace />
+          }
+        />
       </Routes>
     </Router>
   );
